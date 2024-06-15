@@ -13,16 +13,23 @@ import (
     tea "github.com/charmbracelet/bubbletea"
     "github.com/charmbracelet/lipgloss"
 	todo "github.com/1set/todotxt"
+
+    
+	// "github.com/knadh/koanf/v2"
+	// "github.com/knadh/koanf/parsers/toml"
+	// "github.com/knadh/koanf/providers/file"
 )
 
 const todoPath = "/home/z/todo/todo.txt"
 const donePath = "/home/z/todo/done.txt"
-const listHeight = 14
+const listHeight = 20
 
+// Global koanf instance. Use "." as the key path delimiter. This can be "/" or any character.
+// var k = koanf.New(".")
 var (
     titleStyle        = lipgloss.NewStyle().MarginLeft(2)
-    itemStyle         = lipgloss.NewStyle().PaddingLeft(4)
-    selectedItemStyle = lipgloss.NewStyle().PaddingLeft(2).Foreground(lipgloss.Color("170"))
+    itemStyle         = lipgloss.NewStyle().PaddingLeft(1)
+    selectedItemStyle = lipgloss.NewStyle().PaddingLeft(1).Foreground(lipgloss.Color("170"))
     paginationStyle   = list.DefaultStyles().PaginationStyle.PaddingLeft(4)
     helpStyle         = list.DefaultStyles().HelpStyle.PaddingLeft(4).PaddingBottom(1)
     quitTextStyle     = lipgloss.NewStyle().Margin(1, 0, 2, 4)
@@ -43,12 +50,12 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
         return
     }
 
-    str := fmt.Sprintf("%d. %s", index+1, i)
+    str := fmt.Sprintf("%s", i)
 
     fn := itemStyle.Render
     if index == m.Index() {
         fn = func(s ...string) string {
-            return selectedItemStyle.Render("> " + strings.Join(s, " "))
+            return selectedItemStyle.Render("" + strings.Join(s, " "))
         }
     }
 
@@ -67,6 +74,7 @@ func (m model) Init() tea.Cmd {
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
     switch msg := msg.(type) {
+
     case tea.WindowSizeMsg:
         m.list.SetWidth(msg.Width)
         return m, nil
@@ -76,6 +84,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
         case "q", "ctrl+c":
             m.quitting = true
             return m, tea.Quit
+        // mark as done
+        case "d":
+            return m, tea.Quit
+        // edit
         case "e":
             return m, tea.Quit
         case "enter":
@@ -103,23 +115,40 @@ func (m model) View() string {
 }
 
 func main() {
+	// Load config.
+	// if err := k.Load(file.Provider("godo.toml"), toml.Parser()); err != nil {
+	// 	log.Fatalf("error loading config: %v", err)
+	// }
+    
+	// fmt.Println("parent's name is = ", k.String("parent1.name"))
+	// fmt.Println("parent's ID is = ", k.Int("parent1.id"))
+
     items := []list.Item{}
 
     const defaultWidth = 20
 
-
-    if tasklist, err := todo.LoadFromPath("/home/z/todo/todo.txt"); err != nil {
+    // parse todo.txt
+    if tasklist, err := todo.LoadFromPath(todoPath); err != nil {
         log.Fatal(err)
     } else {
         tasks := tasklist.Filter(todo.FilterNotCompleted)
         _ = tasks.Sort(todo.SortPriorityAsc, todo.SortProjectAsc)
         for _, t := range tasks {
-            taskString := t.Todo
+
             // prepend priority
+            priority := ""
             if t.HasPriority() {
-                taskString = t.Priority + " " + taskString
+                priority = t.Priority
             } else {
-                taskString = "  " + taskString
+                priority = " "
+            }
+
+            // prepend id
+            taskString := fmt.Sprintf("%3d %s %s", t.ID, priority, t.Todo)
+            
+            // append due date
+            if t.HasDueDate() {
+                taskString = taskString + " due:" + t.DueDate.Format("2006-01-02")
             }
             items = append(items, item(taskString))
         }
@@ -130,7 +159,7 @@ func main() {
 
     l := list.New(items, itemDelegate{}, defaultWidth, listHeight)
     l.Title = "Todo list"
-    l.SetShowStatusBar(true)
+    l.SetShowStatusBar(false)
     l.SetFilteringEnabled(false)
     l.Styles.Title = titleStyle
     l.Styles.PaginationStyle = paginationStyle
